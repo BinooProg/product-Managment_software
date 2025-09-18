@@ -1,3 +1,83 @@
+<?php
+
+session_start();
+
+$products = [
+    [
+        'id' => 1,
+        'name' => 'Laptop',
+        'description' => 'A powerful laptop for everyday use.',
+        'price' => 1200.00,
+        'category' => 'Electronics'
+    ],
+    [
+        'id' => 2,
+        'name' => 'Headphones',
+        'description' => 'Noise-cancelling wireless headphones.',
+        'price' => 150.50,
+        'category' => 'Electronics'
+    ]
+];
+
+if (isset($_SESSION['products'])) {
+    $products = $_SESSION['products'];
+}
+
+$errors = [];
+$submittedData = [];
+$successMessage = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $submittedData = $_POST;
+    
+    $name = trim($submittedData['name'] ?? '');
+    $description = trim($submittedData['description'] ?? '');
+    $price = trim($submittedData['price'] ?? '');
+    $category = trim($submittedData['category'] ?? '');
+
+    if (empty($name)) {
+        $errors['name'] = 'Product name is required.';
+    }
+    if (strlen($description) < 10) {
+        $errors['description'] = 'Description must be at least 10 characters long.';
+    }
+    if (!is_numeric($price) || $price <= 0) {
+        $errors['price'] = 'Price must be a positive number.';
+    }
+    if (empty($category)) {
+        $errors['category'] = 'Category is required.';
+    }
+
+    if (empty($errors)) {
+        $newId = 1;
+        if (!empty($products)) {
+            $newId = max(array_column($products, 'id')) + 1;
+        }
+
+        $newProduct = [
+            'id' => $newId,
+            'name' => htmlspecialchars($name),
+            'description' => htmlspecialchars($description),
+            'price' => (float)$price,
+            'category' => htmlspecialchars($category)
+        ];
+
+        $products[] = $newProduct;
+        $_SESSION['products'] = $products;
+
+        $_SESSION['success_message'] = 'Product added successfully!';
+        
+        header('Location: ' . $_SERVER['PHP_SELF']);
+        exit;
+    }
+}
+
+if (isset($_SESSION['success_message'])) {
+    $successMessage = $_SESSION['success_message'];
+    unset($_SESSION['success_message']);
+}
+?>
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -41,7 +121,7 @@
                                                 <td>$<?= number_format($product['price'], 2) ?></td>
                                                 <td><?= htmlspecialchars($product['category']) ?></td>
                                             </tr>
-                                        <?php endforeach; ?>f
+                                        <?php endforeach; ?>
                                     </tbody>
                                 </table>
                             </div>
