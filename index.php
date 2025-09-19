@@ -26,10 +26,36 @@ if (isset($_SESSION['products'])) {
 $errors = [];
 $submittedData = [];
 $successMessage = '';
+$editProductId = null;
+$editingProduct = null;
+
+if (isset($_GET['edit_id'])) {
+    $editProductId = (int)$_GET['edit_id'];
+    $foundProductKey = array_search($editProductId, array_column($products, 'id'));
+    if ($foundProductKey !== false) {
+        $editingProduct = $products[$foundProductKey];
+        $submittedData = $editingProduct;
+    } else {
+        header('Location: ' . $_SERVER['PHP_SELF']);
+        exit;
+    }
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['delete_id'])) {
+        $deleteId = (int)$_POST['delete_id'];
+        $products = array_filter($products, function($product) use ($deleteId) {
+            return $product['id'] != $deleteId;
+        });
+        $_SESSION['products'] = array_values($products);
+        $_SESSION['success_message'] = 'Product deleted successfully!';
+        header('Location: ' . $_SERVER['PHP_SELF']);
+        exit;
+    }
+
     $submittedData = $_POST;
-    
+    $isUpdate = isset($submittedData['id']) && !empty($submittedData['id']);
+
     $name = trim($submittedData['name'] ?? '');
     $description = trim($submittedData['description'] ?? '');
     $price = trim($submittedData['price'] ?? '');
@@ -49,23 +75,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
-        $newId = 1;
-        if (!empty($products)) {
-            $newId = max(array_column($products, 'id')) + 1;
+        if ($isUpdate) {
+            $updateId = (int)$submittedData['id'];
+            $foundProductKey = array_search($updateId, array_column($products, 'id'));
+            if ($foundProductKey !== false) {
+                $products[$foundProductKey]['name'] = htmlspecialchars($name);
+                $products[$foundProductKey]['description'] = htmlspecialchars($description);
+                $products[$foundProductKey]['price'] = (float)$price;
+                $products[$foundProductKey]['category'] = htmlspecialchars($category);
+                $_SESSION['products'] = $products;
+                $_SESSION['success_message'] = 'Product updated successfully!';
+            }
+        } else {
+            $newId = 1;
+            if (!empty($products)) {
+                $newId = max(array_column($products, 'id')) + 1;
+            }
+
+            $newProduct = [
+                'id' => $newId,
+                'name' => htmlspecialchars($name),
+                'description' => htmlspecialchars($description),
+                'price' => (float)$price,
+                'category' => htmlspecialchars($category)
+            ];
+
+            $products[] = $newProduct;
+            $_SESSION['products'] = $products;
+            $_SESSION['success_message'] = 'Product added successfully!';
         }
-
-        $newProduct = [
-            'id' => $newId,
-            'name' => htmlspecialchars($name),
-            'description' => htmlspecialchars($description),
-            'price' => (float)$price,
-            'category' => htmlspecialchars($category)
-        ];
-
-        $products[] = $newProduct;
-        $_SESSION['products'] = $products;
-
-        $_SESSION['success_message'] = 'Product added successfully!';
         
         header('Location: ' . $_SERVER['PHP_SELF']);
         exit;
@@ -88,7 +126,7 @@ if (isset($_SESSION['success_message'])) {
 </head>
 <body>
     <div class="container my-5">
-        <h1 class="text-center mb-4"> Product Management</h1>
+        <h1 class="text-center mb-4">Product Management</h1>
         <div class="row">
             <div class="col-lg-8">
                 <div class="card shadow-sm mb-4">
@@ -110,6 +148,7 @@ if (isset($_SESSION['success_message'])) {
                                             <th>Description</th>
                                             <th>Price</th>
                                             <th>Category</th>
+                                            <th>Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -120,7 +159,33 @@ if (isset($_SESSION['success_message'])) {
                                                 <td><?= htmlspecialchars($product['description']) ?></td>
                                                 <td>$<?= number_format($product['price'], 2) ?></td>
                                                 <td><?= htmlspecialchars($product['category']) ?></td>
+                                                <td>
+                                                    <a href="?edit_id=<?= htmlspecialchars($product['id']) ?>" class="btn btn-sm btn-outline-warning">Edit</a>
+                                                    <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteModal<?= htmlspecialchars($product['id']) ?>">
+                                                        Delete
+                                                    </button>
+                                                </td>
                                             </tr>
+                                            <div class="modal fade" id="deleteModal<?= htmlspecialchars($product['id']) ?>" tabindex="-1" aria-labelledby="deleteModalLabel<?= htmlspecialchars($product['id']) ?>" aria-hidden="true">
+                                                <div class="modal-dialog">
+                                                    <div class="modal-content">
+                                                        <div class="modal-header">
+                                                            <h5 class="modal-title" id="deleteModalLabel<?= htmlspecialchars($product['id']) ?>">Confirm Deletion</h5>
+                                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                        </div>
+                                                        <div class="modal-body">
+                                                            Are you sure you want to delete **<?= htmlspecialchars($product['name']) ?>**? This action cannot be undone.
+                                                        </div>
+                                                        <div class="modal-footer">
+                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                            <form action="<?= htmlspecialchars($_SERVER['PHP_SELF']) ?>" method="POST" style="display:inline;">
+                                                                <input type="hidden" name="delete_id" value="<?= htmlspecialchars($product['id']) ?>">
+                                                                <button type="submit" class="btn btn-danger">Delete</button>
+                                                            </form>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         <?php endforeach; ?>
                                     </tbody>
                                 </table>
@@ -131,8 +196,8 @@ if (isset($_SESSION['success_message'])) {
             </div>
             <div class="col-lg-4">
                 <div class="card shadow-sm">
-                    <div class="card-header bg-success text-white">
-                        <h5 class="mb-0">Add New Product</h5>
+                    <div class="card-header bg-<?= $editingProduct ? 'warning' : 'success' ?> text-white">
+                        <h5 class="mb-0"><?= $editingProduct ? 'Edit Product' : 'Add New Product' ?></h5>
                     </div>
                     <div class="card-body">
                         <?php if (!empty($successMessage)): ?>
@@ -149,6 +214,9 @@ if (isset($_SESSION['success_message'])) {
                         <?php endif; ?>
 
                         <form action="<?= htmlspecialchars($_SERVER['PHP_SELF']) ?>" method="POST" novalidate>
+                            <?php if ($editingProduct): ?>
+                                <input type="hidden" name="id" value="<?= htmlspecialchars($editingProduct['id']) ?>">
+                            <?php endif; ?>
                             <div class="mb-3">
                                 <label for="name" class="form-label">Product Name</label>
                                 <input type="text" class="form-control <?= isset($errors['name']) ? 'is-invalid' : '' ?>" id="name" name="name" value="<?= htmlspecialchars($submittedData['name'] ?? '') ?>" required>
@@ -197,7 +265,9 @@ if (isset($_SESSION['success_message'])) {
                                     </div>
                                 <?php endif; ?>
                             </div>
-                            <button type="submit" class="btn btn-success w-100">Add Product</button>
+                            <button type="submit" class="btn btn-<?= $editingProduct ? 'warning' : 'success' ?> w-100">
+                                <?= $editingProduct ? 'Update Product' : 'Add Product' ?>
+                            </button>
                         </form>
                     </div>
                 </div>
